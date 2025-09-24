@@ -3,4 +3,8 @@ project(cgrad)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(cgrad main.cpp)
+add_executable(cgrad main.cpp
+        engine.cpp
+        engine.h
+        neurals.cpp
+        neurals.h)
