@@ -25,38 +25,38 @@ std::vector<std::shared_ptr<Value<double> > > convert_to_values(const std::vecto
 }
 
 int main() {
-    // auto a = Value(1, "a");
-    // auto b = Value(1, "b");
-    // auto c = a + b;
-    // c.label = "c";
-    //
-    // cout << "+" << endl;
-    // cout << "c = " << c << endl;
-    // cout << "c + 2 = " << c + 2 << endl;
-    // cout << "1 + c= " << 1 + c << endl;
-    //
-    // cout << '-' << endl;
-    // cout << "c - 2 = " << c - 2 << endl;
-    // cout << "1 - c= " << 1 - c << endl;
-    //
-    // cout << '^' << endl;
-    // cout << (c ^ a) << endl;
-    // cout << (c ^ 2) << endl;
-    // cout << (3 ^ c) << endl;
-    //
-    // cout << '/' << endl;
-    // cout << (c / a) << endl;
-    // cout << (c / 2) << endl;
-    // cout << (2 / c) << endl;
-    //
-    // cout << '*' << endl;
-    // cout << (c * a) << endl;
-    // cout << (c * 2) << endl;
-    // cout << (2 * c) << endl;
-    //
-    // cout << "tanh" << endl;
-    // auto d = Value(0.5, "d");
-    // cout << d.tanh() << endl;
+    auto a = std::make_shared<Value<double>>(1, "a");
+    auto b = std::make_shared<Value<double>>(1, "b");
+    auto c = a + b;
+    c.get()->label = "c";
+
+    cout << "+" << endl;
+    cout << "c = " << c << endl;
+    cout << "c + 2 = " << c + 2 << endl;
+    cout << "1 + c= " << 1 + c << endl;
+
+    cout << '-' << endl;
+    cout << "c - 2 = " << c - 2 << endl;
+    cout << "1 - c= " << 1 - c << endl;
+
+    cout << '^' << endl;
+    cout << (c ^ a) << endl;
+    cout << (c ^ 2) << endl;
+    cout << (3 ^ c) << endl;
+
+    cout << '/' << endl;
+    cout << (c / a) << endl;
+    cout << (c / 2) << endl;
+    cout << (2 / c) << endl;
+
+    cout << '*' << endl;
+    cout << (c * a) << endl;
+    cout << (c * 2) << endl;
+    cout << (2 * c) << endl;
+
+    cout << "tanh" << endl;
+    auto d = std::make_shared<Value<double>>(0.5, "d");
+    cout << tanh(d) << endl;
     //
     //
     // auto x = Value(2.0, "x");
@@ -120,57 +120,57 @@ int main() {
 
 
     //
-    cout<<n.parameters().size()<<endl;
-
-
+    // cout<<n.parameters().size()<<endl;
+    //
+    //
     cout << "making a training Loop" << endl;
-    auto ITERATIONS = 200;
+    auto ITERATIONS = 20;
 
     std::vector<std::vector<Value<double> > > xs = {
-        {Value(2.0), Value(3.0), Value(-1.0)},
-        {Value(3.0), Value(-1.0), Value(-0.5)},
-        {Value(0.5), Value(1.0), Value(1.0)},
-        {Value(1.0), Value(1.0), Value(-1.0)}
+    {Value(2.0), Value(3.0), Value(-1.0)},
+    {Value(3.0), Value(-1.0), Value(-0.5)},
+    {Value(0.5), Value(1.0), Value(1.0)},
+    {Value(1.0), Value(1.0), Value(-1.0)}
     };
     std::vector ys = {Value(1.0), Value(-1.0), Value(1.0), Value(-1.0)}; // targets
 
 
     for (auto i = 0; i < ITERATIONS; ++i) {
-        // Forward pass
-        std::vector<std::vector<std::shared_ptr<Value<double>>>> y_pred = {};
-        for (auto &x_: xs) {
-            auto x_x = convert_to_values(x_);
-            auto shared_ptrs = n.forward(x_x);
-            y_pred.push_back(shared_ptrs);
-        }
+    // Forward pass
+    std::vector<std::vector<std::shared_ptr<Value<double>>>> y_pred = {};
+    for (auto &x_: xs) {
+    auto x_x = convert_to_values(x_);
+    auto shared_ptrs = n.forward(x_x);
+    y_pred.push_back(shared_ptrs);
+    }
 
-        // Zero gradients
-        for (auto &p: n.parameters()) {
-            p.get()->grad = 0.0;
-        }
+    // Zero gradients
+    for (auto &p: n.parameters()) {
+    p.get()->grad = 0.0;
+    }
 
-        // Compute loss
-        auto y = std::make_shared<Value<double>>(ys[0]);
-        auto yp = y_pred[0][0];
-        auto loss = (y - yp) ^ std::make_shared<Value<double>>(2.0);
-        for (auto j = 1; j < y_pred.size(); ++j) {
-            y = std::make_shared<Value<double>>(ys[j]);
-            yp = y_pred[j][0];
-            loss = loss + ((y - yp) ^ std::make_shared<Value<double>>(2.0));
-        }
-        loss.get()->label = "loss";
-        loss.get()->operation = "MSE";
+    // Compute loss
+    auto y = std::make_shared<Value<double>>(ys[0]);
+    auto yp = y_pred[0][0];
+    auto loss = (y - yp) ^ std::make_shared<Value<double>>(2.0);
+    for (auto j = 1; j < y_pred.size(); ++j) {
+    y = std::make_shared<Value<double>>(ys[j]);
+    yp = y_pred[j][0];
+    loss = loss + ((y - yp) ^ std::make_shared<Value<double>>(2.0));
+    }
+    loss.get()->label = "loss";
+    loss.get()->operation = "MSE";
 
-        // Backward pass
-        loss.get()->backward();
+    // Backward pass
+    loss.get()->backward();
 
-        // Update parameters
-        double learning_rate = 0.05;
-        for (auto &p: n.parameters()) {
-            p.get()->data += -learning_rate * p.get()->grad;
-        }
+    // Update parameters
+    double learning_rate = 0.05;
+    for (auto &p: n.parameters()) {
+    p.get()->data += -learning_rate * p.get()->grad;
+    }
 
-        cout << "i=" << i << " loss=" << loss.get()->data << endl;
+    cout << "i=" << i << " loss=" << loss.get()->data << endl;
     }
     return 0;
 }
