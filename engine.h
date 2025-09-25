@@ -11,6 +11,7 @@
 #include <vector>
 #include <set>
 #include <functional>
+#include <memory> // Add this include for shared_ptr
 
 template<typename T>
 class Value {
@@ -19,134 +20,158 @@ public:
     mutable double grad;
     std::string label;
     std::string operation;
-    std::vector<std::reference_wrapper<const Value<T>> > children;
-    std::function<void(Value<T> &)> _backward = [](Value<T> &) {
-    };
+    std::vector<std::shared_ptr<Value<T>>> children;
+    std::function<void(Value<T> &)> _backward = [](Value<T> &) {};
 
-    explicit Value(T data, std::string label = "",
+    Value(T data, std::string label = "",
                    std::string operation = "",
-                   std::vector<std::reference_wrapper<const Value<T>> > children = {}) : data(data), grad(0.0),
+                   std::vector<std::shared_ptr<Value<T>>> children_vector = {}) :
+        data(data),
+        grad(0.0),
         label(std::move(label)),
-        operation(std::move(operation)),
-        children(std::move(children)) {
-    };
-
-    template<typename U>
-    friend std::ostream &operator<<(std::ostream &os, const Value<U> &value);
-
-    Value<T> operator+(const Value<T> &other) const {
-        auto out = Value<T>(data + other.data, "", "+", {*this, other});
-        out._backward = [](Value<T> &value) {
-            value.children[0].get().grad += value.grad;
-            value.children[1].get().grad += value.grad;
-        };
-        return out;
+        operation(std::move(operation)) {
+        children = std::move(children_vector);
     }
-
-    Value<T> operator+(const T &other) const {
-        return *this + Value<T>(other);
-    }
-
-    friend Value<T> operator+(const T &scalar, const Value<T> &value) {
-        return value + scalar;
-    }
-
-    Value<T> operator-(const Value<T> &other) const {
-        auto out = Value<T>(data - other.data, "", "-", {*this, other});
-        out._backward = [](Value<T> &v) {
-            v.children[0].get().grad += v.grad;
-            v.children[1].get().grad -= v.grad;
-        };
-        return out;
-    }
-
-    Value<T> operator-(const T &other) const {
-        return *this - Value<T>(other);
-    }
-
-    friend Value<T> operator-(const T &scalar, const Value<T> &value) {
-        return Value<T>(scalar) - value;
-    }
-
-    Value<T> operator*(const Value<T> &other) const {
-        auto out = Value<T>(data * other.data, "", "*", {*this, other});
-        out._backward = [](Value<T> &v) {
-            v.children[0].get().grad += v.children[1].get().data * v.grad;
-            v.children[1].get().grad += v.children[0].get().data * v.grad;
-        };
-        return out;
-    }
-
-    Value<T> operator*(const T &other) const {
-        return *this * Value<T>(other);
-    }
-
-    friend Value<T> operator*(const T &scalar, const Value<T> &value) {
-        return value * scalar;
-    }
-
-    Value<T> operator^(const Value<T> &other) const {
-        auto out = Value<T>(std::pow(data, other.data), "", "^", {*this, other});
-        out._backward = [](Value<T> &v) {
-            v.children[0].get().grad += (v.children[1].get().data * std::pow(
-                                             v.children[0].get().data, v.children[1].get().data - 1)) * v.grad;
-            v.children[1].get().grad += (std::log(v.children[0].get().data) * std::pow(
-                                             v.children[0].get().data, v.children[1].get().data)) * v.grad;
-        };
-        return out;
-    }
-
-    Value<T> operator^(const T &other) const {
-        return *this ^ Value<T>(other);
-    }
-
-    friend Value<T> operator^(const T &scalar, const Value<T> &value) {
-        return Value<T>(scalar) ^ value;
-    }
-
-    Value<T> operator/(const Value<T> &other) const {
-        return *this * (other ^ Value<T>(-1));
-    }
-
-    Value<T> operator/(const T &other) const {
-        return *this / Value<T>(other);
-    }
-
-    friend Value<T> operator/(const T &scalar, const Value<T> &value) {
-        return Value<T>(scalar) / value;
-    }
-
-    Value<double> tanh() const {
-        auto vl = std::tanh(data);
-        auto out = Value<double>(vl, "tanh(" + this->label + ")", "tanh", {*this});
-        out._backward = [vl](Value<double> &v) {
-            v.children[0].get().grad += (1 - std::pow(vl, 2)) * v.grad;
-        };
-        return out;
-    };
 
     void backward() {
-        std::vector<std::reference_wrapper<const Value<T>> > topo;
-        std::set<const Value<T> *> visited;
+        std::vector<Value<T> *> topo;
+        std::set<Value<T> *> visited;
 
-        std::function<void(const Value<T> &)> build_topo = [&](const Value<T> &v) {
-            if (visited.find(&v) == visited.end()) {
-                visited.insert(&v);
-                for (const auto &child: v.children) {
+        std::function<void(Value<T> *)> build_topo = [&](Value<T> *v) {
+            if (visited.find(v) == visited.end()) {
+                visited.insert(v);
+                for (const auto &child: v->children) {
                     build_topo(child.get());
                 }
                 topo.push_back(v);
             }
         };
 
-        build_topo(*this);
+        build_topo(this);
 
         grad = 1.0;
         for (auto it = topo.rbegin(); it != topo.rend(); ++it) {
-            const_cast<Value<T> &>(it->get())._backward(const_cast<Value<T> &>(it->get()));
+            (*it)->_backward(**it);
         }
     }
 };
+
+template<typename T>
+std::shared_ptr<Value<T>> operator+(const std::shared_ptr<Value<T>> &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    T args = lhs->data + rhs->data;
+    std::vector<std::shared_ptr<Value<T>>> children = {lhs, rhs};
+    auto out = std::make_shared<Value<T>>(args, "", "*", children);
+    out->_backward = [](Value<T> &value) {
+        value.children[0]->grad += value.grad;
+        value.children[1]->grad += value.grad;
+    };
+    return out;
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator-(const std::shared_ptr<Value<T>> &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    auto args = lhs->data - rhs->data;
+    std::vector<std::shared_ptr<Value<T>>> children = {lhs, rhs};
+    auto out = std::make_shared<Value<T>>(args, "", "*", children);
+    out->_backward = [](Value<T> &v) {
+        v.children[0]->grad += v.grad;
+        v.children[1]->grad -= v.grad;
+    };
+    return out;
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator*(const std::shared_ptr<Value<T>> &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    T args = (lhs->data * rhs->data);
+    std::vector<std::shared_ptr<Value<T>>> children = {lhs, rhs};
+    auto out = std::make_shared<Value<T>>(args, "", "*", children);
+    out->_backward = [](Value<T> &v) {
+        v.children[0]->grad += v.children[1]->data * v.grad;
+        v.children[1]->grad += v.children[0]->data * v.grad;
+    };
+    return out;
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator^(const std::shared_ptr<Value<T>> &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    auto args = std::pow(lhs->data, rhs->data);
+    std::vector<std::shared_ptr<Value<T>>> children = {lhs, rhs};
+    auto out = std::make_shared<Value<T>>(args, "", "*", children);
+    out->_backward = [](Value<T> &v) {
+        v.children[0]->grad += (v.children[1]->data * std::pow(
+                                             v.children[0]->data, v.children[1]->data - 1)) * v.grad;
+        v.children[1]->grad += (std::log(v.children[0]->data) * std::pow(
+                                             v.children[0]->data, v.children[1]->data)) * v.grad;
+    };
+    return out;
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator/(const std::shared_ptr<Value<T>> &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    return lhs * (rhs ^ std::make_shared<Value<T>>(-1));
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator+(const std::shared_ptr<Value<T>> &lhs, const T &rhs) {
+    return lhs + std::make_shared<Value<T>>(rhs);
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator+(const T &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    return std::make_shared<Value<T>>(lhs) + rhs;
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator-(const std::shared_ptr<Value<T>> &lhs, const T &rhs) {
+    return lhs - std::make_shared<Value<T>>(rhs);
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator-(const T &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    return std::make_shared<Value<T>>(lhs) - rhs;
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator*(const std::shared_ptr<Value<T>> &lhs, const T &rhs) {
+    return lhs * std::make_shared<Value<T>>(rhs);
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator*(const T &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    return std::make_shared<Value<T>>(lhs) * rhs;
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator^(const std::shared_ptr<Value<T>> &lhs, const T &rhs) {
+    return lhs ^ std::make_shared<Value<T>>(rhs);
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator^(const T &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    return std::make_shared<Value<T>>(lhs) ^ rhs;
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator/(const std::shared_ptr<Value<T>> &lhs, const T &rhs) {
+    return lhs / std::make_shared<Value<T>>(rhs);
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> operator/(const T &lhs, const std::shared_ptr<Value<T>> &rhs) {
+    return std::make_shared<Value<T>>(lhs) / rhs;
+}
+
+template<typename T>
+std::shared_ptr<Value<T>> tanh(const std::shared_ptr<Value<T>> &val) {
+    auto vl = std::tanh(val->data);
+    std::vector children = {val, };
+    auto out = std::make_shared<Value<T>>(vl, "", "tanh", children);
+    out->_backward = [vl](Value<T> &v) {
+        auto g = (1 - std::pow(vl, 2)) * v.grad;
+        v.children[0]->grad += g;
+    };
+    return out;
+}
 
 template<typename T>
 std::ostream &operator<<(std::ostream &os, const Value<T> &value) {

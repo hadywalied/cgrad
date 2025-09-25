@@ -12,8 +12,8 @@
 #include <random>
 
 class Neuron {
-    Value<double> bias = Value(0.0);
-    std::vector<Value<double> > weights = {};
+    std::shared_ptr<Value<double>> bias = std::make_shared<Value<double>>(0.0);
+    std::vector<std::shared_ptr<Value<double> >> weights = {};
 
 public:
     Neuron(const int n_i) {
@@ -25,20 +25,22 @@ public:
         std::uniform_real_distribution distribution(min_val, max_val);
 
         for (auto i = 0; i < n_i; ++i) {
-            weights.emplace_back(Value(distribution(generator)));
+            std::uniform_real_distribution<>::result_type rnd = distribution(generator);
+            auto value = std::make_shared<Value<double>>(rnd);
+            weights.emplace_back(value);
         }
-        bias = Value(distribution(generator));
+        bias = std::make_shared<Value<double>>(distribution(generator));
     }
 
-    Value<double> forward(const std::vector<Value<double> > &inputs) const {
+    std::shared_ptr<Value<double>> forward(const std::vector<std::shared_ptr<Value<double> >> &inputs) const {
         auto sum = bias;
         for (auto i = 0; i < inputs.size(); ++i) {
-            sum = sum + inputs[i] * weights[i];
+            sum = sum + (inputs[i] * weights[i]);
         }
-        return sum.tanh();
+        return tanh(sum);
     }
 
-    std::vector<Value<double> > parameters() {
+    std::vector<std::shared_ptr<Value<double> >> parameters() {
         auto all_params = weights;
         all_params.push_back(bias);
         return all_params;
@@ -55,18 +57,19 @@ public:
         }
     }
 
-    std::vector<Value<double> > forward(const std::vector<Value<double> > &inputs) const {
-        auto out = std::vector<Value<double> >();
+    std::vector<std::shared_ptr<Value<double> >> forward(const std::vector<std::shared_ptr<Value<double> >> &inputs) const {
+        auto out = std::vector<std::shared_ptr<Value<double> >>();
         for (auto &neuron: neurons) {
             out.push_back(neuron.forward(inputs));
         }
         return out;
     }
 
-    std::vector<Value<double> > parameters() {
-        auto all_params = std::vector<Value<double> >();
+    std::vector<std::shared_ptr<Value<double>>> parameters() {
+        auto all_params = std::vector<std::shared_ptr<Value<double> >>();
         for (auto &neuron: neurons) {
-            all_params.insert(all_params.end(), neuron.parameters().begin(), neuron.parameters().end());
+            auto values = neuron.parameters();
+            all_params.insert(all_params.end(), values.begin(), values.end());
         }
         return all_params;
     }
@@ -85,7 +88,7 @@ public:
         }
     }
 
-    std::vector<Value<double> > forward(const std::vector<Value<double> > &inputs) const {
+    std::vector<std::shared_ptr<Value<double>> > forward(const std::vector<std::shared_ptr<Value<double>> > &inputs) const {
         auto out = inputs;
         for (auto &layer: layers) {
             out = layer.forward(out);
@@ -93,10 +96,11 @@ public:
         return out;
     }
 
-    std::vector<Value<double> > parameters() {
-        auto all_params = std::vector<Value<double> >();
+    std::vector<std::shared_ptr<Value<double>>> parameters() {
+        auto all_params = std::vector<std::shared_ptr<Value<double>>>();
         for (auto &layer: layers) {
-            all_params.insert(all_params.end(), layer.parameters().begin(), layer.parameters().end());
+            auto values = layer.parameters();
+            all_params.insert(all_params.end(), values.begin(), values.end());
         }
         return all_params;
     }
