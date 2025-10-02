@@ -1,0 +1,3 @@
+micrograd
+memory_profiler
+psutil
